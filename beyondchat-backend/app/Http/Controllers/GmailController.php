@@ -40,4 +40,11 @@ class GmailController extends Controller
 
         return redirect('http://localhost:5173/integrations');
     }
+
+    public function status(Request $request)
+    {
+        return response()->json([
+            'connected' => session()->has('gmail_token')
+        ]);
+    }
 }
