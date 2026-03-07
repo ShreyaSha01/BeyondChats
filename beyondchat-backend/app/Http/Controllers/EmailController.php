@@ -57,4 +57,20 @@ class EmailController extends Controller
             "message" => "Emails synced successfully"
         ]);
     }
+
+    public function getThreads()
+    {
+        $threads = Thread::orderBy('created_at', 'desc')->get();
+
+        return response()->json($threads);
+    }
+
+    public function getThreadEmails($threadId)
+    {
+        $emails = Email::where('thread_id', $threadId)
+            ->orderBy('sent_at', 'asc')
+            ->get();
+
+        return response()->json($emails);
+    }
 }

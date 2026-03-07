@@ -1,9 +1,26 @@
+import { useEffect, useState } from "react";
+import axios from "axios";
+
 function Chats() {
+  const [threads, setThreads] = useState([]);
+
+  useEffect(() => {
+    axios
+      .get("http://localhost/api/threads")
+      .then((res) => {
+        setThreads(res.data);
+      });
+  }, []);
+
   return (
     <div>
-      <h1>Chats</h1>
+      <h1>Email Threads</h1>
 
-      <p>Your synced email threads will appear here.</p>
+      {threads.map((thread) => (
+        <div key={thread.thread_id}>
+          <p>Thread ID: {thread.thread_id}</p>
+        </div>
+      ))}
     </div>
   );
 }
