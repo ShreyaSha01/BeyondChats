@@ -1,11 +1,18 @@
 function Integrations() {
+
+  const connectGmail = () => {
+    window.location.href = "http://localhost/api/auth/google";
+  };
+
   return (
     <div>
       <h1>Integrations</h1>
 
-      <p>Connect your Gmail account.</p>
+      <p>Connect your Gmail account to sync emails.</p>
 
-      <button>Connect Gmail</button>
+      <button onClick={connectGmail}>
+        Connect Gmail
+      </button>
     </div>
   );
 }
