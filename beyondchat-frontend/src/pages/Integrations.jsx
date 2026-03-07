@@ -4,6 +4,8 @@ import axios from "axios";
 function Integrations() {
   const [connected, setConnected] = useState(false);
   const [days, setDays] = useState(7);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
     axios
@@ -23,11 +25,22 @@ function Integrations() {
   };
 
   const syncEmails = async () => {
-    await axios.post("http://localhost/api/sync-emails", {
-      days: days,
-    });
+    setLoading(true);
+    setMessage("");
 
-    alert("Email sync started!");
+    try {
+      const response = await axios.post(
+        "http://localhost/api/sync-emails",
+        { days },
+        { withCredentials: true }
+      );
+
+      setMessage(response.data.message);
+    } catch (error) {
+      setMessage("Error syncing emails");
+    }
+
+    setLoading(false);
   };
 
   return (
@@ -48,14 +61,19 @@ function Integrations() {
             value={days}
             onChange={(e) => setDays(e.target.value)}
           >
+            <option value={1}>Last 1 Day</option>
             <option value={7}>Last 7 Days</option>
             <option value={30}>Last 30 Days</option>
             <option value={90}>Last 90 Days</option>
           </select>
 
-          <button onClick={syncEmails}>
-            Sync Emails
+          <button onClick={syncEmails} disabled={loading}>
+            {loading ? "Syncing Emails..." : "Sync Emails"}
           </button>
+
+          {loading && <p>Fetching emails from Gmail...</p>}
+
+          {message && <p>{message}</p>}
         </>
       )}
     </div>
