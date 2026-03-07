@@ -42,14 +42,53 @@ class EmailController extends Controller
 
             $threadId = $msg->getThreadId();
 
+            $payload = $msg->getPayload();
+            $headers = $payload->getHeaders();
+
+            $from = null;
+            $to = null;
+            $subject = null;
+
+            foreach ($headers as $header) {
+                if ($header->getName() === 'From') {
+                    $from = $header->getValue();
+                }
+
+                if ($header->getName() === 'To') {
+                    $to = $header->getValue();
+                }
+
+                if ($header->getName() === 'Subject') {
+                    $subject = $header->getValue();
+                }
+            }
+
+            // Extract HTML body
+            $body = '';
+            $parts = $payload->getParts();
+
+            if ($parts) {
+                foreach ($parts as $part) {
+                    if ($part->getMimeType() === 'text/html') {
+                        $body = base64_decode(
+                            strtr($part->getBody()->getData(), '-_', '+/')
+                        );
+                    }
+                }
+            }
+
             Thread::firstOrCreate([
-                'thread_id' => $threadId
+                'thread_id' => $threadId,
+                'subject' => $subject
             ]);
 
             Email::create([
                 'thread_id' => $threadId,
                 'message_id' => $msg->getId(),
-                'body_html' => json_encode($msg->getPayload())
+                'from' => $from,
+                'to' => $to,
+                'body_html' => $body,
+                'sent_at' => now()
             ]);
         }
 
