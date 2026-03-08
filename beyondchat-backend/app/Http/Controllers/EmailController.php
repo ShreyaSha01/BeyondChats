@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Database\Schema\Blueprint;
 use Google\Client;
 use Google\Service\Gmail;
 use App\Models\Thread;
@@ -13,6 +14,31 @@ use App\Models\Attachment;
 
 class EmailController extends Controller
 {
+    public function __construct()
+    {
+        $this->ensureAttachmentsTableExists();
+    }
+
+    private function ensureAttachmentsTableExists()
+    {
+        if (!Schema::hasTable('attachments')) {
+            try {
+                Schema::create('attachments', function (Blueprint $table) {
+                    $table->id();
+                    $table->foreignId('email_id')->constrained('emails')->cascadeOnDelete();
+                    $table->string('filename');
+                    $table->string('mime_type')->nullable();
+                    $table->string('attachment_id');
+                    $table->integer('size')->nullable();
+                    $table->timestamps();
+                });
+                Log::info('Created attachments table');
+            } catch (\Exception $e) {
+                Log::error('Failed to create attachments table: ' . $e->getMessage());
+            }
+        }
+    }
+
     private function getService()
     {
         $client = new Client();
@@ -103,20 +129,23 @@ class EmailController extends Controller
 
                     // Save attachments if table exists
                     if (\Schema::hasTable('attachments')) {
+                        Log::info("Processing " . count($attachments) . " attachments for email " . $email->id);
                         foreach ($attachments as $attachment) {
                             try {
-                                Attachment::create([
+                                $created = Attachment::create([
                                     'email_id' => $email->id,
                                     'filename' => $attachment['filename'],
                                     'mime_type' => $attachment['mime_type'],
                                     'attachment_id' => $attachment['attachment_id'],
                                     'size' => $attachment['size']
                                 ]);
+                                Log::info("Created attachment: " . $created->id . " - " . $attachment['filename']);
                             } catch (\Exception $e) {
-                                // Log attachment error but continue
-                                \Log::warning('Failed to save attachment: ' . $e->getMessage());
+                                Log::error('Failed to save attachment: ' . $e->getMessage());
                             }
                         }
+                    } else {
+                        Log::warning('Attachments table does not exist, skipping attachment save');
                     }
 
                     $syncedCount++;
@@ -154,6 +183,7 @@ class EmailController extends Controller
                     // This is an attachment
                     $bodyPart = $part->getBody();
                     if ($bodyPart && $bodyPart->getAttachmentId()) {
+                        Log::info("Found attachment: " . $filename . " (ID: " . $bodyPart->getAttachmentId() . ")");
                         $attachments[] = [
                             'filename' => $filename,
                             'mime_type' => $part->getMimeType(),
@@ -164,21 +194,23 @@ class EmailController extends Controller
                 } elseif ($part->getMimeType() === 'text/html') {
                     $bodyPart = $part->getBody();
                     if ($bodyPart && $bodyPart->getData()) {
-                        $htmlBody .= base64_decode(
+                        $htmlBody = base64_decode(
                             strtr($bodyPart->getData(), '-_', '+/')
                         );
                     }
                 } elseif ($part->getMimeType() === 'text/plain') {
                     $bodyPart = $part->getBody();
                     if ($bodyPart && $bodyPart->getData()) {
-                        $plainBody .= nl2br(htmlspecialchars(base64_decode(
+                        $plainBody = nl2br(htmlspecialchars(base64_decode(
                             strtr($bodyPart->getData(), '-_', '+/')
                         )));
                     }
                 } elseif (in_array($part->getMimeType(), ['multipart/alternative', 'multipart/mixed', 'multipart/related'])) {
                     $tempBody = '';
                     $this->processParts($part->getParts(), $tempBody, $attachments);
-                    $body .= $tempBody;
+                    if (!empty($tempBody)) {
+                        $body = $tempBody;
+                    }
                 }
             } catch (\Exception $e) {
                 Log::warning('Failed to process email part: ' . $e->getMessage());
@@ -187,9 +219,9 @@ class EmailController extends Controller
         }
 
         if (!empty($htmlBody)) {
-            $body .= $htmlBody;
-        } elseif (!empty($plainBody)) {
-            $body .= $plainBody;
+            $body = $htmlBody;
+        } elseif (!empty($plainBody) && empty($body)) {
+            $body = $plainBody;
         }
     }
 

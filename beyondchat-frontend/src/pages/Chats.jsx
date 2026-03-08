@@ -97,17 +97,27 @@ function Chats() {
                     className={`thread-item ${selectedThread === thread.thread_id ? "active" : ""}`}
                     onClick={() => openThread(thread.thread_id)}
                   >
-                    <div className="thread-subject">{thread.subject || "No Subject"}</div>
+                    <div className="thread-subject">
+                      {thread.subject || "No Subject"}
+                    </div>
                     {summary ? (
                       <div className="thread-summary">
-                        <div className="summary-preview">{summary.preview}...</div>
+                        <div className="summary-preview">
+                          {summary.preview}...
+                        </div>
                         <div className="summary-meta">
-                          <span className="summary-count">{summary.emailCount} emails</span>
-                          <span className="summary-date">{summary.lastDate}</span>
+                          <span className="summary-count">
+                            {summary.emailCount} emails
+                          </span>
+                          <span className="summary-date">
+                            {summary.lastDate}
+                          </span>
                         </div>
                       </div>
                     ) : (
-                      <div className="thread-placeholder">Click to load preview</div>
+                      <div className="thread-placeholder">
+                        Click to load preview
+                      </div>
                     )}
                   </div>
                 );
