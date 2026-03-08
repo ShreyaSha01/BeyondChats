@@ -350,6 +350,15 @@ body {
   color: #e2e8f0;
   font-size: 0.95rem;
   overflow-wrap: break-word;
+  white-space: normal;
+}
+
+.message div br {
+  display: none;
+}
+
+.message div * {
+  white-space: normal !important;
 }
 
 .message div a {
