@@ -48,15 +48,23 @@ function Chats() {
         <div className="threads-list">
           <h2>Threads</h2>
 
-          {threads.map((thread) => (
-            <div
-              key={thread.thread_id}
-              className={`thread-item ${selectedThread === thread.thread_id ? "active" : ""}`}
-              onClick={() => openThread(thread.thread_id)}
-            >
-              <p>{thread.subject || "No Subject"}</p>
-            </div>
-          ))}
+          <div
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              overscrollBehavior: "contain",
+            }}
+          >
+            {threads.map((thread) => (
+              <div
+                key={thread.thread_id}
+                className={`thread-item ${selectedThread === thread.thread_id ? "active" : ""}`}
+                onClick={() => openThread(thread.thread_id)}
+              >
+                <p>{thread.subject || "No Subject"}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="conversation-area">
