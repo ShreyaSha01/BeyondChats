@@ -5,6 +5,7 @@ function Chats() {
   const [threads, setThreads] = useState([]);
   const [selectedThread, setSelectedThread] = useState(null);
   const [emails, setEmails] = useState([]);
+  const [reply, setReply] = useState("");
 
   useEffect(() => {
     axios.get("http://localhost/api/threads").then((res) => {
@@ -22,9 +23,25 @@ function Chats() {
     setEmails(res.data);
   };
 
+  const sendReply = async () => {
+    if (!reply) return;
+
+    const lastEmail = emails[emails.length - 1];
+
+    await axios.post("http://localhost/api/reply", {
+      thread_id: selectedThread,
+      message: reply,
+      to: lastEmail.from,
+      subject: "Reply"
+    });
+
+    setReply("");
+    alert("Reply sent!");
+  };
+
   return (
     <div style={{ display: "flex", height: "100vh" }}>
-      
+
       <div style={{ width: "30%", borderRight: "1px solid #ddd", padding: "10px" }}>
         <h2>Threads</h2>
 
@@ -68,6 +85,28 @@ function Chats() {
           </div>
         ))}
       </div>
+
+      {selectedThread && (
+        <div style={{ marginTop: "20px" }}>
+          <textarea
+            placeholder="Write your reply..."
+            value={reply}
+            onChange={(e) => setReply(e.target.value)}
+            style={{
+              width: "100%",
+              height: "100px",
+              padding: "10px"
+            }}
+          />
+
+          <button
+            style={{ marginTop: "10px" }}
+            onClick={sendReply}
+          >
+            Send Reply
+          </button>
+        </div>
+      )}
 
     </div>
   );

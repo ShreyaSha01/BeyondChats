@@ -112,4 +112,32 @@ class EmailController extends Controller
 
         return response()->json($emails);
     }
+
+    public function replyToThread(Request $request)
+{
+    $threadId = $request->thread_id;
+    $message = $request->message;
+    $to = $request->to;
+    $subject = $request->subject;
+
+    $service = $this->getService();
+
+    $rawMessage = "To: {$to}\r\n";
+    $rawMessage .= "Subject: Re: {$subject}\r\n";
+    $rawMessage .= "In-Reply-To: {$threadId}\r\n";
+    $rawMessage .= "References: {$threadId}\r\n";
+    $rawMessage .= "\r\n{$message}";
+
+    $encodedMessage = rtrim(strtr(base64_encode($rawMessage), '+/', '-_'), '=');
+
+    $gmailMessage = new \Google\Service\Gmail\Message();
+    $gmailMessage->setRaw($encodedMessage);
+    $gmailMessage->setThreadId($threadId);
+
+    $service->users_messages->send("me", $gmailMessage);
+
+    return response()->json([
+        "message" => "Reply sent successfully"
+    ]);
+}
 }

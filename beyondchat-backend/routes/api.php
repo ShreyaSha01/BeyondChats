@@ -11,4 +11,5 @@ Route::middleware([\Illuminate\Session\Middleware\StartSession::class])->group(f
     Route::post('/sync-emails', [EmailController::class, 'syncEmails']);
     Route::get('/threads', [EmailController::class, 'getThreads']);
     Route::get('/threads/{threadId}', [EmailController::class, 'getThreadEmails']);
+    Route::post('/reply', [EmailController::class, 'replyToThread']);
 });
