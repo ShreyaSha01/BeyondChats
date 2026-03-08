@@ -74,12 +74,16 @@ class EmailController extends Controller
                         }
                     }
 
-                    // Extract HTML body
                     $body = '';
                     $attachments = [];
                     $parts = $payload->getParts();
 
-                    if ($parts) {
+                    if (!$parts) {
+                        $bodyPart = $payload->getBody();
+                        if ($bodyPart && $bodyPart->getData()) {
+                            $body = base64_decode(strtr($bodyPart->getData(), '-_', '+/'));
+                        }
+                    } else {
                         $this->processParts($parts, $body, $attachments);
                     }
 
@@ -136,7 +140,11 @@ class EmailController extends Controller
 
     private function processParts($parts, &$body, &$attachments)
     {
-        if (!$parts) return;
+        if (!$parts)
+            return;
+
+        $htmlBody = '';
+        $plainBody = '';
 
         foreach ($parts as $part) {
             try {
@@ -154,22 +162,34 @@ class EmailController extends Controller
                         ];
                     }
                 } elseif ($part->getMimeType() === 'text/html') {
-                    // This is the HTML body
                     $bodyPart = $part->getBody();
                     if ($bodyPart && $bodyPart->getData()) {
-                        $body = base64_decode(
+                        $htmlBody .= base64_decode(
                             strtr($bodyPart->getData(), '-_', '+/')
                         );
                     }
+                } elseif ($part->getMimeType() === 'text/plain') {
+                    $bodyPart = $part->getBody();
+                    if ($bodyPart && $bodyPart->getData()) {
+                        $plainBody .= nl2br(htmlspecialchars(base64_decode(
+                            strtr($bodyPart->getData(), '-_', '+/')
+                        )));
+                    }
                 } elseif (in_array($part->getMimeType(), ['multipart/alternative', 'multipart/mixed', 'multipart/related'])) {
-                    // Recursively process nested parts
-                    $this->processParts($part->getParts(), $body, $attachments);
+                    $tempBody = '';
+                    $this->processParts($part->getParts(), $tempBody, $attachments);
+                    $body .= $tempBody;
                 }
             } catch (\Exception $e) {
-                // Log part processing error but continue
                 Log::warning('Failed to process email part: ' . $e->getMessage());
                 continue;
             }
+        }
+
+        if (!empty($htmlBody)) {
+            $body .= $htmlBody;
+        } elseif (!empty($plainBody)) {
+            $body .= $plainBody;
         }
     }
 
@@ -191,32 +211,32 @@ class EmailController extends Controller
     }
 
     public function replyToThread(Request $request)
-{
-    $threadId = $request->thread_id;
-    $message = $request->message;
-    $to = $request->to;
-    $subject = $request->subject;
+    {
+        $threadId = $request->thread_id;
+        $message = $request->message;
+        $to = $request->to;
+        $subject = $request->subject;
 
-    $service = $this->getService();
+        $service = $this->getService();
 
-    $rawMessage = "To: {$to}\r\n";
-    $rawMessage .= "Subject: Re: {$subject}\r\n";
-    $rawMessage .= "In-Reply-To: {$threadId}\r\n";
-    $rawMessage .= "References: {$threadId}\r\n";
-    $rawMessage .= "\r\n{$message}";
+        $rawMessage = "To: {$to}\r\n";
+        $rawMessage .= "Subject: Re: {$subject}\r\n";
+        $rawMessage .= "In-Reply-To: {$threadId}\r\n";
+        $rawMessage .= "References: {$threadId}\r\n";
+        $rawMessage .= "\r\n{$message}";
 
-    $encodedMessage = rtrim(strtr(base64_encode($rawMessage), '+/', '-_'), '=');
+        $encodedMessage = rtrim(strtr(base64_encode($rawMessage), '+/', '-_'), '=');
 
-    $gmailMessage = new \Google\Service\Gmail\Message();
-    $gmailMessage->setRaw($encodedMessage);
-    $gmailMessage->setThreadId($threadId);
+        $gmailMessage = new \Google\Service\Gmail\Message();
+        $gmailMessage->setRaw($encodedMessage);
+        $gmailMessage->setThreadId($threadId);
 
-    $service->users_messages->send("me", $gmailMessage);
+        $service->users_messages->send("me", $gmailMessage);
 
-    return response()->json([
-        "message" => "Reply sent successfully"
-    ]);
-}
+        return response()->json([
+            "message" => "Reply sent successfully"
+        ]);
+    }
 
     public function downloadAttachment($messageId, $attachmentId)
     {
@@ -228,7 +248,7 @@ class EmailController extends Controller
             $data = base64_decode(strtr($attachment->getData(), '-_', '+/'));
 
             // Get attachment info from database
-            $attachmentInfo = \App\Models\Attachment::whereHas('email', function($query) use ($messageId) {
+            $attachmentInfo = \App\Models\Attachment::whereHas('email', function ($query) use ($messageId) {
                 $query->where('message_id', $messageId);
             })->where('attachment_id', $attachmentId)->first();
 
