@@ -48,6 +48,20 @@ class EmailController extends Controller
         $token = session('gmail_token');
         if ($token) {
             $client->setAccessToken($token);
+
+            // Check if token is expired and refresh if needed
+            if ($client->isAccessTokenExpired()) {
+                if ($client->getRefreshToken()) {
+                    $client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
+                    $newToken = $client->getAccessToken();
+                    session(['gmail_token' => $newToken]);
+                    Log::info('Token refreshed successfully');
+                } else {
+                    Log::error('No refresh token available');
+                }
+            }
+        } else {
+            Log::error('No Gmail token found in session');
         }
 
         return new Gmail($client);
@@ -263,11 +277,30 @@ class EmailController extends Controller
         $gmailMessage->setRaw($encodedMessage);
         $gmailMessage->setThreadId($threadId);
 
-        $service->users_messages->send("me", $gmailMessage);
+        try {
+            $sentMessage = $service->users_messages->send("me", $gmailMessage);
 
-        return response()->json([
-            "message" => "Reply sent successfully"
-        ]);
+            // Get the authenticated user's email address dynamically
+            $userEmail = $service->users->getProfile('me')->getEmailAddress();
+
+            Email::create([
+                'thread_id' => $threadId,
+                'message_id' => $sentMessage->getId(),
+                'from' => $userEmail,
+                'to' => $to,
+                'body_html' => nl2br(htmlspecialchars($message)),
+                'sent_at' => now()
+            ]);
+
+            return response()->json([
+                "message" => "Reply sent successfully"
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to send reply: ' . $e->getMessage());
+            return response()->json([
+                "message" => "Failed to send reply: " . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function downloadAttachment($messageId, $attachmentId)

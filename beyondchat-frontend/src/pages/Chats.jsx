@@ -12,7 +12,7 @@ function Chats() {
 
   useEffect(() => {
     axios.get("http://localhost/api/threads").then((res) => {
-      setThreads(res.data);
+      setThreads(res.data.reverse());
     });
   }, []);
 
@@ -27,9 +27,9 @@ function Chats() {
 
     // Compute and cache thread summary
     if (res.data && res.data.length > 0) {
-      const lastEmail = res.data[res.data.length - 1];
-      const preview = stripHtml(lastEmail.body_html).substring(0, 80);
-      const lastDate = new Date(lastEmail.sent_at).toLocaleDateString();
+      const mostRecentEmail = res.data[0];
+      const preview = stripHtml(mostRecentEmail.body_html).substring(0, 80);
+      const lastDate = new Date(mostRecentEmail.sent_at).toLocaleDateString();
 
       setThreadSummaries((prev) => ({
         ...prev,
@@ -37,7 +37,7 @@ function Chats() {
           emailCount: res.data.length,
           preview,
           lastDate,
-          lastFrom: lastEmail.from,
+          lastFrom: mostRecentEmail.from,
         },
       }));
     }
@@ -52,17 +52,30 @@ function Chats() {
   const sendReply = async () => {
     if (!reply) return;
 
-    const lastEmail = emails[emails.length - 1];
+    const originalEmail = emails[emails.length - 1];
 
-    await axios.post("http://localhost/api/reply", {
-      thread_id: selectedThread,
-      message: reply,
-      to: lastEmail.from,
-      subject: "Reply",
-    });
+    try {
+      await axios.post(
+        "http://localhost/api/reply",
+        {
+          thread_id: selectedThread,
+          message: reply,
+          to: originalEmail.from,
+          subject: selectedThreadData?.subject || "No Subject",
+        },
+        { withCredentials: true },
+      );
+      setReply("");
+      alert("Reply sent!");
 
-    setReply("");
-    alert("Reply sent!");
+      const res = await axios.get(
+        `http://localhost/api/threads/${selectedThread}`,
+      );
+      setEmails(res.data.reverse());
+    } catch (error) {
+      console.error("Reply failed:", error);
+      alert("Failed to send reply. Please try again.");
+    }
   };
 
   const filteredThreads = threads.filter((thread) =>

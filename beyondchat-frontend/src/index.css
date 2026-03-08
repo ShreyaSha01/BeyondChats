@@ -473,8 +473,9 @@ body {
 
 .select-input {
   width: 100%;
-  padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.05);
+  padding: 14px 48px 14px 16px;
+  background: rgba(255, 255, 255, 0.05) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%23e2e8f0' d='M6 9L1 4h10z'/></svg>") no-repeat center right 16px;
+  background-size: 12px;
   border: 1px solid var(--glass-border);
   border-radius: 12px;
   color: white;
@@ -483,6 +484,9 @@ body {
   font-family: inherit;
   cursor: pointer;
   transition: var(--transition);
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
 }
 
 .select-input option {
