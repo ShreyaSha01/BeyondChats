@@ -3,10 +3,13 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Log;
 use Google\Client;
 use Google\Service\Gmail;
 use App\Models\Thread;
 use App\Models\Email;
+use App\Models\Attachment;
 
 class EmailController extends Controller
 {
@@ -26,75 +29,148 @@ class EmailController extends Controller
 
     public function syncEmails(Request $request)
     {
-        $days = $request->days;
+        try {
+            $days = $request->days;
 
-        $service = $this->getService();
+            $service = $this->getService();
 
-        $query = "newer_than:{$days}d";
+            $query = "newer_than:{$days}d";
 
-        $messages = $service->users_messages->listUsersMessages('me', [
-            'q' => $query
-        ]);
+            $messages = $service->users_messages->listUsersMessages('me', [
+                'q' => $query
+            ]);
 
-        foreach ($messages->getMessages() ?? [] as $message) {
+            $syncedCount = 0;
 
-            $msg = $service->users_messages->get('me', $message->getId());
+            foreach ($messages->getMessages() ?? [] as $message) {
+                try {
+                    $msg = $service->users_messages->get('me', $message->getId());
 
-            $threadId = $msg->getThreadId();
+                    $threadId = $msg->getThreadId();
 
-            $payload = $msg->getPayload();
-            $headers = $payload->getHeaders();
+                    $payload = $msg->getPayload();
+                    $headers = $payload->getHeaders();
 
-            $from = null;
-            $to = null;
-            $subject = null;
+                    $from = null;
+                    $to = null;
+                    $subject = null;
+                    $sentAt = null;
 
-            foreach ($headers as $header) {
-                if ($header->getName() === 'From') {
-                    $from = $header->getValue();
-                }
+                    foreach ($headers as $header) {
+                        if ($header->getName() === 'From') {
+                            $from = $header->getValue();
+                        }
 
-                if ($header->getName() === 'To') {
-                    $to = $header->getValue();
-                }
+                        if ($header->getName() === 'To') {
+                            $to = $header->getValue();
+                        }
 
-                if ($header->getName() === 'Subject') {
-                    $subject = $header->getValue();
+                        if ($header->getName() === 'Subject') {
+                            $subject = $header->getValue();
+                        }
+
+                        if ($header->getName() === 'Date') {
+                            $sentAt = $header->getValue();
+                        }
+                    }
+
+                    // Extract HTML body
+                    $body = '';
+                    $attachments = [];
+                    $parts = $payload->getParts();
+
+                    if ($parts) {
+                        $this->processParts($parts, $body, $attachments);
+                    }
+
+                    $thread = Thread::firstOrCreate([
+                        'thread_id' => $threadId,
+                        'subject' => $subject
+                    ]);
+
+                    $email = Email::create([
+                        'thread_id' => $threadId,
+                        'message_id' => $msg->getId(),
+                        'from' => $from,
+                        'to' => $to,
+                        'body_html' => $body,
+                        'sent_at' => $sentAt ? \Carbon\Carbon::parse($sentAt) : now()
+                    ]);
+
+                    // Save attachments if table exists
+                    if (\Schema::hasTable('attachments')) {
+                        foreach ($attachments as $attachment) {
+                            try {
+                                Attachment::create([
+                                    'email_id' => $email->id,
+                                    'filename' => $attachment['filename'],
+                                    'mime_type' => $attachment['mime_type'],
+                                    'attachment_id' => $attachment['attachment_id'],
+                                    'size' => $attachment['size']
+                                ]);
+                            } catch (\Exception $e) {
+                                // Log attachment error but continue
+                                \Log::warning('Failed to save attachment: ' . $e->getMessage());
+                            }
+                        }
+                    }
+
+                    $syncedCount++;
+                } catch (\Exception $e) {
+                    // Log individual email error but continue processing
+                    \Log::error('Failed to process email ' . $message->getId() . ': ' . $e->getMessage());
+                    continue;
                 }
             }
 
-            // Extract HTML body
-            $body = '';
-            $parts = $payload->getParts();
+            return response()->json([
+                "message" => "Successfully synced {$syncedCount} emails"
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Email sync failed: ' . $e->getMessage());
+            return response()->json([
+                "message" => "Error syncing emails: " . $e->getMessage()
+            ], 500);
+        }
+    }
 
-            if ($parts) {
-                foreach ($parts as $part) {
-                    if ($part->getMimeType() === 'text/html') {
+    private function processParts($parts, &$body, &$attachments)
+    {
+        if (!$parts) return;
+
+        foreach ($parts as $part) {
+            try {
+                $filename = $part->getFilename();
+
+                if ($filename) {
+                    // This is an attachment
+                    $bodyPart = $part->getBody();
+                    if ($bodyPart && $bodyPart->getAttachmentId()) {
+                        $attachments[] = [
+                            'filename' => $filename,
+                            'mime_type' => $part->getMimeType(),
+                            'attachment_id' => $bodyPart->getAttachmentId(),
+                            'size' => $bodyPart->getSize()
+                        ];
+                    }
+                } elseif ($part->getMimeType() === 'text/html') {
+                    // This is the HTML body
+                    $bodyPart = $part->getBody();
+                    if ($bodyPart && $bodyPart->getData()) {
                         $body = base64_decode(
-                            strtr($part->getBody()->getData(), '-_', '+/')
+                            strtr($bodyPart->getData(), '-_', '+/')
                         );
                     }
+                } elseif (in_array($part->getMimeType(), ['multipart/alternative', 'multipart/mixed', 'multipart/related'])) {
+                    // Recursively process nested parts
+                    $this->processParts($part->getParts(), $body, $attachments);
                 }
+            } catch (\Exception $e) {
+                // Log part processing error but continue
+                Log::warning('Failed to process email part: ' . $e->getMessage());
+                continue;
             }
-
-            Thread::firstOrCreate([
-                'thread_id' => $threadId,
-                'subject' => $subject
-            ]);
-
-            Email::create([
-                'thread_id' => $threadId,
-                'message_id' => $msg->getId(),
-                'from' => $from,
-                'to' => $to,
-                'body_html' => $body,
-                'sent_at' => now()
-            ]);
         }
-
-        return response()->json([
-            "message" => "Emails synced successfully"
-        ]);
     }
 
     public function getThreads()
@@ -107,6 +183,7 @@ class EmailController extends Controller
     public function getThreadEmails($threadId)
     {
         $emails = Email::where('thread_id', $threadId)
+            ->with('attachments')
             ->orderBy('sent_at', 'asc')
             ->get();
 
@@ -140,4 +217,30 @@ class EmailController extends Controller
         "message" => "Reply sent successfully"
     ]);
 }
+
+    public function downloadAttachment($messageId, $attachmentId)
+    {
+        try {
+            $service = $this->getService();
+
+            $attachment = $service->users_messages_attachments->get('me', $messageId, $attachmentId);
+
+            $data = base64_decode(strtr($attachment->getData(), '-_', '+/'));
+
+            // Get attachment info from database
+            $attachmentInfo = \App\Models\Attachment::whereHas('email', function($query) use ($messageId) {
+                $query->where('message_id', $messageId);
+            })->where('attachment_id', $attachmentId)->first();
+
+            $filename = $attachmentInfo ? $attachmentInfo->filename : 'attachment';
+            $mimeType = $attachmentInfo ? $attachmentInfo->mime_type : 'application/octet-stream';
+
+            return response($data)
+                ->header('Content-Type', $mimeType)
+                ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+        } catch (\Exception $e) {
+            Log::error('Attachment download failed: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to download attachment'], 500);
+        }
+    }
 }

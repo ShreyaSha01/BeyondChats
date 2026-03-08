@@ -14,4 +14,9 @@ class Email extends Model
         'body_html',
         'sent_at'
     ];
+
+    public function attachments()
+    {
+        return $this->hasMany(Attachment::class);
+    }
 }

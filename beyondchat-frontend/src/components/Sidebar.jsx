@@ -1,23 +1,26 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
-function Sidebar() {
+function Sidebar({ isOpen, onClose }) {
+  const location = useLocation();
+
   return (
-    <div
-      style={{
-        width: "220px",
-        background: "#1f2937",
-        color: "white",
-        padding: "20px",
-      }}
-    >
+    <div className={`sidebar ${isOpen ? 'open' : ''}`}>
       <h2>BeyondChats</h2>
 
-      <nav style={{ marginTop: "30px", display: "flex", flexDirection: "column", gap: "15px" }}>
-        <Link to="/integrations" style={{ color: "white" }}>
+      <nav>
+        <Link
+          to="/integrations"
+          className={location.pathname === '/integrations' ? 'active' : ''}
+          onClick={onClose}
+        >
           Integrations
         </Link>
 
-        <Link to="/chats" style={{ color: "white" }}>
+        <Link
+          to="/chats"
+          className={location.pathname === '/chats' ? 'active' : ''}
+          onClick={onClose}
+        >
           Chats
         </Link>
       </nav>

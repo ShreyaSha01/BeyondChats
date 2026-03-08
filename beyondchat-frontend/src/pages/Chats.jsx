@@ -4,6 +4,7 @@ import axios from "axios";
 function Chats() {
   const [threads, setThreads] = useState([]);
   const [selectedThread, setSelectedThread] = useState(null);
+  const [selectedThreadData, setSelectedThreadData] = useState(null);
   const [emails, setEmails] = useState([]);
   const [reply, setReply] = useState("");
 
@@ -15,10 +16,10 @@ function Chats() {
 
   const openThread = async (threadId) => {
     setSelectedThread(threadId);
+    const threadData = threads.find((t) => t.thread_id === threadId);
+    setSelectedThreadData(threadData);
 
-    const res = await axios.get(
-      `http://localhost/api/threads/${threadId}`
-    );
+    const res = await axios.get(`http://localhost/api/threads/${threadId}`);
 
     setEmails(res.data);
   };
@@ -32,7 +33,7 @@ function Chats() {
       thread_id: selectedThread,
       message: reply,
       to: lastEmail.from,
-      subject: "Reply"
+      subject: "Reply",
     });
 
     setReply("");
@@ -40,74 +41,89 @@ function Chats() {
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
+    <div>
+      <h1 className="page-title">Chats</h1>
 
-      <div style={{ width: "30%", borderRight: "1px solid #ddd", padding: "10px" }}>
-        <h2>Threads</h2>
+      <div className="chats-container">
+        <div className="threads-list">
+          <h2>Threads</h2>
 
-        {threads.map((thread) => (
-          <div
-            key={thread.thread_id}
-            onClick={() => openThread(thread.thread_id)}
-            style={{
-              padding: "10px",
-              borderBottom: "1px solid #eee",
-              cursor: "pointer",
-            }}
-          >
-            <p>Thread: {thread.thread_id}</p>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ flex: 1, padding: "20px" }}>
-        <h2>Email Conversation</h2>
-
-        {selectedThread === null && <p>Select a thread</p>}
-
-        {emails.map((email) => (
-          <div
-            key={email.id}
-            style={{
-              border: "1px solid #ddd",
-              padding: "10px",
-              marginBottom: "10px",
-            }}
-          >
-            <p><strong>From:</strong> {email.from}</p>
-            <p><strong>To:</strong> {email.to}</p>
-
+          {threads.map((thread) => (
             <div
-              dangerouslySetInnerHTML={{
-                __html: email.body_html,
-              }}
-            />
-          </div>
-        ))}
-      </div>
-
-      {selectedThread && (
-        <div style={{ marginTop: "20px" }}>
-          <textarea
-            placeholder="Write your reply..."
-            value={reply}
-            onChange={(e) => setReply(e.target.value)}
-            style={{
-              width: "100%",
-              height: "100px",
-              padding: "10px"
-            }}
-          />
-
-          <button
-            style={{ marginTop: "10px" }}
-            onClick={sendReply}
-          >
-            Send Reply
-          </button>
+              key={thread.thread_id}
+              className={`thread-item ${selectedThread === thread.thread_id ? "active" : ""}`}
+              onClick={() => openThread(thread.thread_id)}
+            >
+              <p>{thread.subject || "No Subject"}</p>
+            </div>
+          ))}
         </div>
-      )}
 
+        <div className="conversation-area">
+          <div className="conversation-header">
+            <h2>
+              {selectedThreadData
+                ? selectedThreadData.subject || "No Subject"
+                : "Email Conversation"}
+            </h2>
+          </div>
+
+          <div className="conversation-messages">
+            {selectedThread === null && (
+              <p>Select a thread to view the conversation</p>
+            )}
+
+            {emails.map((email) => (
+              <div key={email.id} className="message">
+                <p>
+                  <strong>From:</strong> {email.from}
+                </p>
+                <p>
+                  <strong>To:</strong> {email.to}
+                </p>
+                <div dangerouslySetInnerHTML={{ __html: email.body_html }} />
+                {email.attachments && email.attachments.length > 0 && (
+                  <div className="attachments">
+                    <strong>Attachments:</strong>
+                    <div className="attachment-list">
+                      {email.attachments.map((attachment) => (
+                        <a
+                          key={attachment.id}
+                          href={`http://localhost/api/attachments/${email.message_id}/${attachment.attachment_id}`}
+                          className="attachment-link"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          📎 {attachment.filename}
+                          {attachment.size && (
+                            <span className="attachment-size">
+                              ({Math.round(attachment.size / 1024)} KB)
+                            </span>
+                          )}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {selectedThread && (
+            <div className="reply-section">
+              <textarea
+                placeholder="Write your reply..."
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+                className="reply-textarea"
+              />
+              <button className="btn" onClick={sendReply}>
+                Send Reply
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
